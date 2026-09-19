@@ -1,49 +1,57 @@
 // Esta clase representa la PANTALLA de login.
-// Su trabajo es saber "cómo" interactuar con esta pantalla específica:
+// Su trabajo es saber "cómo" interactuar con esta pantalla:
 // dónde están los campos, botones, y mensajes.
-// Las pruebas (los archivos .cy.js) NO deberían saber estos detalles,
-// solo deberían decir "haz login" sin preocuparse del cómo.
 class LoginPage {
 
-  // "elements" es un objeto donde guardamos TODOS los selectores de esta pantalla.
-  // Cada propiedad es una función que, al llamarse, busca ese elemento en el DOM.
-  // Ventaja: si el desarrollador cambia un id en el HTML, solo corriges AQUÍ,
-  // y todas las pruebas que usan este Page Object se arreglan solas.
+  // "elements" guarda TODOS los selectores de esta pantalla.
+  // Cada propiedad es una función que busca ese elemento en el DOM.
   elements = {
-    usernameInput: () => cy.get('#user-name'),        // campo de texto del usuario
-    passwordInput: () => cy.get('#password'),         // campo de texto de la contraseña
-    loginButton: () => cy.get('#login-button'),       // botón para enviar el login
-    errorMessage: () => cy.get('[data-test="error"]'), // caja roja de error que aparece si algo falla
+    usernameInput: () => cy.get('#user-name'),
+    passwordInput: () => cy.get('#password'),
+    loginButton: () => cy.get('#login-button'),
+    errorMessage: () => cy.get('[data-test="error"]'),
   };
 
-  // Método para ir directamente a la página de login.
-  // Lo llamamos así en vez de escribir cy.visit(url) en cada prueba,
-  // para que si la URL cambia algún día, solo la corrijas en un lugar.
+  // Va directo a la página de login.
   visit() {
     cy.visit('https://www.saucedemo.com/');
   }
 
-  // Método que agrupa TODA la acción de "iniciar sesión":
-  // escribir usuario, escribir contraseña, y dar clic en el botón.
-  // Recibe los datos como parámetros, así que sirve para
-  // login exitoso, login fallido, usuario bloqueado, etc.
-  // solo cambiando qué le mandas.
+  // Login normal: escribe usuario, contraseña, y da clic.
+  // Se ejecuta completo cada vez (sin caché).
+  // Úsalo cuando la prueba trata sobre el login mismo.
   login(username, password) {
-    this.elements.usernameInput().type(username);   // escribe el usuario
-    this.elements.passwordInput().type(password);   // escribe la contraseña
-    this.elements.loginButton().click();             // da clic en "Login"
+    this.elements.usernameInput().type(username);
+    this.elements.passwordInput().type(password);
+    this.elements.loginButton().click();
   }
 
-  // Método para obtener el mensaje de error.
-  // Lo dejamos como método aparte (en vez de acceder directo a "elements")
-  // porque así, si en el futuro cambia CÓMO se valida el error
-  // (por ejemplo, si hay que esperar algo antes), lo ajustas aquí sin tocar las pruebas.
+  // Regresa el mensaje de error de la pantalla.
   getErrorMessage() {
     return this.elements.errorMessage();
   }
+
+  // Login CON CACHE de sesion.
+  // Usalo cuando la prueba NO es sobre el login,
+  // solo necesita estar autenticada (ej. productos, carrito).
+  loginWithSession(username, password) {
+
+    // cy.session recibe un identificador de la sesion
+    // y una funcion que dice como hacer login la primera vez.
+    cy.session([username, password], () => {
+
+      // Este bloque solo corre la primera vez.
+      this.visit();
+      this.login(username, password);
+
+      // Confirmamos que el login funciono antes de guardarla.
+      cy.url().should('include', '/inventory.html');
+    });
+
+    // De la segunda llamada en adelante, Cypress restaura
+    // las cookies guardadas al instante, sin repetir el proceso.
+  }
 }
 
-// Exportamos UNA sola instancia ya creada de esta clase (no la clase en sí).
-// Así, cuando la importas en varios archivos de prueba,
-// todos usan el mismo objeto — no hace falta escribir "new LoginPage()" cada vez.
+// Exportamos una sola instancia ya creada de esta clase.
 export default new LoginPage();
