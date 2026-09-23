@@ -1,0 +1,129 @@
+# ============================================================
+# WORKFLOW DE GITHUB ACTIONS: Pruebas Cypress
+# ------------------------------------------------------------
+# Este archivo vive en .github/workflows/cypress.yml
+# GitHub lo detecta automáticamente en esa ubicación, no hay
+# que activarlo ni configurarlo en ningún otro lado.
+#
+# Un "workflow" es una receta: le dices a GitHub "cuando pase
+# tal evento, haz estos pasos en una máquina virtual". Aquí la
+# receta es: cada vez que alguien sube código o abre un Pull
+# Request, levanta una máquina, instala el proyecto y corre
+# toda la suite de Cypress.
+# ============================================================
+
+# "name" es solo una etiqueta descriptiva. Es lo que vas a ver
+# como título en la pestaña "Actions" del repositorio en GitHub,
+# y también es el nombre que aparece en la palomita verde o
+# la equis roja de cada commit y Pull Request.
+name: Pruebas Cypress
+
+# ------------------------------------------------------------
+# "on" define QUÉ EVENTOS disparan este workflow.
+# Si un evento no está listado aquí, el workflow simplemente
+# no se entera y no corre nada.
+# ------------------------------------------------------------
+on:
+
+  # Se dispara cuando alguien hace "git push" a estas ramas.
+  # branches: [...] es una lista; puedes agregar o quitar ramas.
+  push:
+    branches:
+      - main               # push directo a main (en teoría no debería pasar si la proteges)
+      - develop             # cada vez que algo entra a develop (por ejemplo, tras fusionar un PR)
+      - 'release/**'        # cualquier rama que empiece con "release/", como release/1.0
+                             # las comillas son obligatorias en YAML cuando usas el asterisco (*)
+
+  # Se dispara cuando alguien ABRE o ACTUALIZA un Pull Request
+  # que apunta hacia estas ramas (sin importar desde qué rama viene).
+  # Esto es lo que te deja ver, ANTES de fusionar, si el código
+  # rompe algo.
+  pull_request:
+    branches:
+      - main
+      - develop
+
+# ------------------------------------------------------------
+# "jobs" son los bloques de trabajo que se ejecutan.
+# Aquí solo tenemos uno, pero un workflow puede tener varios
+# jobs corriendo en paralelo (por ejemplo, uno para pruebas y
+# otro para desplegar). Cada job corre en su propia máquina
+# virtual, desde cero.
+# ------------------------------------------------------------
+jobs:
+
+  # "cypress-run" es el nombre que le damos a este job.
+  # Tú lo eliges; podría llamarse "test" o "correr-pruebas".
+  # Este nombre es el que después seleccionas al configurar la
+  # protección de ramas ("Require status checks to pass").
+  cypress-run:
+
+    # "runs-on" dice en qué sistema operativo se levanta la
+    # máquina virtual. "ubuntu-latest" es la opción más común y
+    # más rápida para proyectos de JavaScript/Cypress; no
+    # necesitas Windows aquí aunque tú desarrolles en Windows.
+    runs-on: ubuntu-latest
+
+    # "steps" es la lista de pasos que se ejecutan EN ORDEN,
+    # de arriba hacia abajo, dentro de esa máquina virtual.
+    # Si un paso falla, los siguientes no se ejecutan (el job
+    # se marca como fallido) salvo que el paso diga lo contrario
+    # (como el "if: failure()" que verás más abajo).
+    steps:
+
+      # ----------------------------------------------------
+      # PASO 1: descargar el código
+      # ----------------------------------------------------
+      # La máquina virtual empieza VACÍA, sin tu código. Este
+      # paso hace el equivalente a un "git clone" de tu repo
+      # dentro de la máquina, para que los pasos siguientes
+      # tengan los archivos disponibles.
+      - name: Descargar código
+        # "uses" significa "usa una acción ya hecha por alguien más",
+        # en vez de escribir el comando a mano. "actions/checkout"
+        # es una acción oficial de GitHub. "@v4" fija la versión,
+        # para que un cambio futuro en la acción no te rompa el workflow.
+        uses: actions/checkout@v4
+
+      # ----------------------------------------------------
+      # PASO 2: instalar dependencias y correr las pruebas
+      # ----------------------------------------------------
+      # "cypress-io/github-action" es una acción oficial de Cypress
+      # que hace dos cosas por ti en un solo paso:
+      #   1) Corre "npm ci" para instalar exactamente las mismas
+      #      dependencias que tienes en package-lock.json
+      #      (por eso ese archivo debe estar subido a GitHub)
+      #   2) Corre "npx cypress run" para ejecutar TODA la suite
+      #      de pruebas dentro de cypress/e2e
+      - name: Correr pruebas de Cypress
+        uses: cypress-io/github-action@v6
+        # "with" son los parámetros que le pasamos a la acción
+        with:
+          # Le decimos que use Chrome como navegador para correr
+          # las pruebas (headless, sin ventana visible)
+          browser: chrome
+
+      # ----------------------------------------------------
+      # PASO 3: guardar evidencia si algo falla
+      # ----------------------------------------------------
+      # Cuando una prueba de Cypress falla, Cypress toma una
+      # captura de pantalla automáticamente y la guarda en
+      # cypress/screenshots. Ese paso normalmente se pierde
+      # porque la máquina virtual se destruye al terminar el job.
+      # Este paso la "rescata" y la deja descargable desde GitHub.
+      - name: Guardar capturas de fallos
+        # "if: failure()" es una condición: este paso SOLO se
+        # ejecuta si algún paso anterior falló. Si todo salió
+        # bien, este paso se salta por completo.
+        if: failure()
+        # "actions/upload-artifact" es otra acción oficial de GitHub,
+        # sirve para adjuntar archivos al resultado del workflow.
+        uses: actions/upload-artifact@v4
+        with:
+          # Nombre con el que se va a ver el archivo adjunto en GitHub
+          name: cypress-screenshots
+          # Carpeta que se va a subir
+          path: cypress/screenshots
+          # Si la carpeta no existe (porque no hubo capturas),
+          # que no marque error por eso; simplemente lo ignora
+          if-no-files-found: ignore
